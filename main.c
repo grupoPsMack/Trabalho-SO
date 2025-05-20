@@ -1,8 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-//0-FIFO, 1-LRU, 2-CLOCK, 3-PRÓPIO
-
 typedef struct{
     int num_pagina;
     int presente;
@@ -40,63 +38,52 @@ typedef struct{
     int totalAcessos;
     int tempo_atual;
     int tam_pagina;
+    int num_processos;
+    int ponterio_clock;
 }Simulador;
 
 
-void traducaoEnderecos(int endereco, Processo processo, Simulador simulador);
-int pageFaultFIFO(Pagina pagina, memoriaFisica memoria, int pid, Simulador simulador);
-int pageFaultLRU(Pagina pagina, memoriaFisica memoria, int pid, Simulador simulador);
+void traducaoEnderecos(int endereco, Processo *processo, Simulador *simulador);
+void estatisticas(Simulador simulador);
 void imprimirMemoria(memoriaFisica memoria);
 
+int pageFaultFIFO(Pagina *pagina, memoriaFisica *memoria, int pid, Simulador *simulador);
+int pageFaultLRU(Pagina *pagina, memoriaFisica *memoria, int pid, Simulador *simulador);
+//int pageFaultClock(Pagina *pagina, memoriaFisica *memoria, int pid, Simulador *simulador);
 
-//ARRUMAR A ESTÉTICA DOS PRINTS, DAR A SAÍDA EM UM ARQUIVO COM O MESMO FORMATO DOS PRINTS
+void inicializacaoInput(Simulador *s);
+void inicializacaoPadrao(Simulador *s);
+void liberarMallocs(Simulador *simulador);
+
+
+//Fórmula está errada no print do endereço físico
+
+//clock
+//aleatório
+//tlb
+//própio
+
 int main(){
     Simulador s;
+    int escolha;
+    printf("Digite 1 para digitar os dados ou 2 para usar a configuracao padrao adotada: ");
+    scanf("%d", &escolha);
 
-    //3 opções um padrão da aplicação, por arquivo e por input
+    switch (escolha){
+        case 1:
+            inicializacaoInput(&s);
+            break;
+        
+        case 2:
+            inicializacaoPadrao(&s);
+            break;
 
-    //FAZER OS MALLOCS EM TODAS AS LISTAS POSSÍVEIS PARA CONSEGUIR TESTAR
-    int tamanho_pagina, tamanho_memoria, algoritimo, total_processos;
-    printf("Qual sera o tamanho da pagina? ");
-    scanf("%d", &tamanho_pagina);
-    printf("Qual sera o tamanho da memoria? ");
-    scanf("%d", &tamanho_memoria);
-    printf("Qual sera o algoritimo? ");
-    scanf("%d", &algoritimo);
-
-    memoriaFisica memoria;
-    memoria.tamanho = tamanho_memoria;
-    memoria.num_frames = tamanho_memoria/tamanho_pagina;
-    memoria.frames_ocupados = 0;
-    memoria.frames = (Frame*) malloc(memoria.num_frames*sizeof(Frame));
-    for(int i=0; i<memoria.num_frames; i++){
-        memoria.frames[i].pid = -1;
-        memoria.frames[i].pagina = -1;
+        default:
+            printf("\nOpção inválida\n");
+            return 1;
     }
-
-
-    s.memoria = memoria;
-    s.tam_pagina = tamanho_pagina;
-    s.totalAcessos = 0;
-    s.pageFaults = 0;
-    s.tempo_atual = 0;
-    s.algoritimo = algoritimo;
-
-    printf("Quantos processos teremos? ");
-    scanf("%d", &total_processos);
-    s.processos = (Processo*) malloc(total_processos*sizeof(Processo));
-    for(int i=0; i<total_processos;i++){
-        s.processos[i].pid = i+1;
-        printf("Qual sera o tamanho do processo? ");
-        scanf("%d", &s.processos[i].tamanho);
-        s.processos[i].num_paginas = s.processos[i].tamanho/s.tam_pagina;
-        s.processos[i].tabelaPaginas = (Pagina*) malloc(s.processos[i].num_paginas*sizeof(Pagina));
-        for(int j=0; j<s.processos[i].num_paginas; j++){
-            s.processos[i].tabelaPaginas[j].num_pagina = j;
-            s.processos[i].tabelaPaginas[j].presente = 0;
-            s.processos[i].tabelaPaginas[j].frame  = -1;
-        }
-    }
+   
+    
 
     int matriz_teste[15][2] = {
         {1, 0},       // página 0
@@ -118,12 +105,13 @@ int main(){
 
     printf("\n\n\n\n");
     for(int i=0; i<15; i++){
-        printf("i: %d", i);
-        traducaoEnderecos(matriz_teste[i][1], s.processos[matriz_teste[i][0]-1], s);
+        traducaoEnderecos(matriz_teste[i][1], &s.processos[matriz_teste[i][0]-1], &s);
         s.totalAcessos+=1;
         s.tempo_atual += 1;
     }
 
+    estatisticas(s);
+    liberarMallocs(&s);
     return 0;
 }
 
@@ -131,7 +119,7 @@ int main(){
 void imprimirMemoria(memoriaFisica memoria){
     for(int i=0; i<memoria.num_frames; i++){
         if(memoria.frames[i].pid == -1){
-            printf("Esse frame esta desocupado\n");
+            printf("Frame %d: Esse frame esta desocupado\n", i);
         }
         else{
             printf("Frame %d: processo %d; pagina %d\n", i, memoria.frames[i].pid, memoria.frames[i].pagina);
@@ -139,97 +127,109 @@ void imprimirMemoria(memoriaFisica memoria){
     }
 }
 
-//TENTAR ABSTRAIR MAIS UM POUCO A FUNÇÃO
-void traducaoEnderecos(int endereco, Processo processo, Simulador simulador){
+void traducaoEnderecos(int endereco, Processo *processo, Simulador *simulador){
     int paginas;
     int deslocamento;
     int frame_alocado;
-    if(endereco % processo.tamanho == 0){
-        paginas = endereco / processo.tamanho;
-        deslocamento = 0;
+    int tempo;
+    if( endereco<simulador->tam_pagina){
+        paginas = 0;
+        deslocamento = endereco%simulador->tam_pagina;
     }else{
-        //ERRO NO CALCULO DO ENDEREÇO E PAGINA AQUI
-        paginas = (endereco/processo.tamanho) + 1;
-        deslocamento = endereco % processo.tamanho;
+        paginas = (endereco/simulador->tam_pagina);
+        deslocamento = endereco % processo->tamanho;
     }
 
-    printf("PAGINA CALCULADA: %d", paginas);
-
-    if(paginas > processo.num_paginas){
+    if(paginas > processo->num_paginas){
         perror("Segmentation Fault");
         //PERGUNTAR SE O PAGE FAULT DO SEGMENTATION FAULT DEVE SER CONTABILIZADO;
         return;
     }
 
-    if(processo.tabelaPaginas[paginas].presente == 0){
-        printf("\nTempo t=%d: [PAGE FAULT] Pagina %d do processo %d nao esta na memoria fisica!\n", simulador.tempo_atual, paginas, processo.pid);
-        if(simulador.memoria.num_frames > simulador.memoria.frames_ocupados){
-            for(int i=0; i<simulador.memoria.num_frames; i++){
-                if(simulador.memoria.frames[i].pid == -1){
-                    simulador.memoria.frames[i].pid = processo.pid;
-                    simulador.memoria.frames[i].pagina = paginas;
-                    processo.tabelaPaginas[paginas].frame = i;
-                    processo.tabelaPaginas[paginas].presente = 1;
-                    processo.tabelaPaginas[paginas].tempo_carga = simulador.tempo_atual;
-                    processo.tabelaPaginas[paginas].ultimo_acesso = simulador.tempo_atual;
-                    printf("Tempo t=%d: Carregando a pagina %d do processo %d no Frame %d\n\n", simulador.tempo_atual, paginas, processo.pid, i);
-                    printf("pagina da memoria:%d ; frame da pagina: %d\n\n", simulador.memoria.frames[i].pagina, simulador.processos[processo.pid-1].tabelaPaginas[paginas].frame);
+    if(processo->tabelaPaginas[paginas].presente == 0){
+        printf("\nTempo t=%d: [PAGE FAULT] Pagina %d do processo %d nao esta na memoria fisica!\n", simulador->tempo_atual, paginas, processo->pid);
+        if(simulador->memoria.num_frames > simulador->memoria.frames_ocupados){
+            simulador->memoria.frames_ocupados += 1;
+            for(int i=0; i<simulador->memoria.num_frames; i++){
+
+                if(simulador->memoria.frames[i].pid == -1){
+
+                    simulador->memoria.frames[i].pid = processo->pid;
+                    simulador->memoria.frames[i].pagina = paginas;
+                    processo->tabelaPaginas[paginas].frame = i;
+                    processo->tabelaPaginas[paginas].presente = 1;
+
+                    tempo = simulador->tempo_atual;
+                    processo->tabelaPaginas[paginas].tempo_carga = tempo;
+                    processo->tabelaPaginas[paginas].ultimo_acesso = simulador->tempo_atual;
+                    printf("Tempo t=%d: Carregando a pagina %d do processo %d no Frame %d\n\n", simulador->tempo_atual, paginas, processo->pid, i);
+                    frame_alocado = i;
                     break;
                 }
             }
-            simulador.memoria.frames_ocupados += 1;
         }
         else{
-            switch (simulador.algoritimo){
-                //FAZER DEMAIS FUNÇÕES OU FAZER UMA FUNÇÃO DE REDIRECIONAMENTO
+            switch (simulador->algoritimo){
                 case 0:
-                    frame_alocado = pageFaultFIFO(processo.tabelaPaginas[paginas], simulador.memoria, processo.pid, simulador);
+                    frame_alocado = pageFaultFIFO(&processo->tabelaPaginas[paginas], &simulador->memoria, processo->pid, simulador);
                     break;
                 
+                /*case 1:
+                    frame_alocado = pageFaultClock(&processo->tabelaPaginas[paginas], &simulador->memoria, processo->pid, simulador);*/
+                
                 default:
-                    frame_alocado = pageFaultLRU(processo.tabelaPaginas[paginas], simulador.memoria, processo.pid, simulador);
+                    frame_alocado = pageFaultLRU(&processo->tabelaPaginas[paginas], &simulador->memoria, processo->pid, simulador);
                     break;
             }
         }
-        simulador.pageFaults += 1;
+        simulador->pageFaults += 1;
     }
     else{
-        frame_alocado = processo.tabelaPaginas[paginas].frame;
-        processo.tabelaPaginas[paginas].ultimo_acesso = simulador.tempo_atual;
-        printf("Tempo t=%d: Pagina %d do processo %d esta na memoria fisica no frame %d!\n\n", simulador.tempo_atual, paginas, processo.pid, frame_alocado);
+        frame_alocado = processo->tabelaPaginas[paginas].frame;
+
+        tempo =simulador->tempo_atual;
+        processo->tabelaPaginas[paginas].ultimo_acesso = tempo;
+        printf("Tempo t=%d: Pagina %d do processo %d esta na memoria fisica no frame %d!\n\n", simulador->tempo_atual, paginas, processo->pid, frame_alocado);
     }
-    imprimirMemoria(simulador.memoria);
-    printf("Tempo t=%d: Endereco Virtual P%d: (%d) -> Pagina %d -> Frame %d -> Endereco fisico: (%d)\n\n[...continua...]\n\n", simulador.tempo_atual, processo.pid, paginas, endereco, frame_alocado, frame_alocado*simulador.tam_pagina+deslocamento);
+    imprimirMemoria(simulador->memoria);
+    printf("Tempo t=%d: Endereco Virtual P%d: (%d) -> Pagina %d -> Frame %d -> Endereco fisico: (%d)\n\n[...continua...]\n\n", simulador->tempo_atual, processo->pid, endereco, paginas, frame_alocado, (frame_alocado*simulador->tam_pagina)+deslocamento);
 }
 
-//função de estatisticas
+void estatisticas(Simulador simulador){
+    printf("\n\n---Estatisticas---\n");
+    printf("Total de Acessos: %d\n", simulador.totalAcessos);
+    printf("Page Faults: %d\n", simulador.pageFaults);
+    printf("Total de Acessos: %d por cento", (simulador.pageFaults*100)/simulador.totalAcessos);
+}
 
-int pageFaultFIFO(Pagina pagina, memoriaFisica memoria, int pid, Simulador simulador){
+int pageFaultFIFO(Pagina *pagina, memoriaFisica *memoria, int pid, Simulador *simulador){
     int max_time = 0;
     int frame = 0;
-    for(int i=0; i<memoria.num_frames; i++){
-        if(simulador.processos[memoria.frames[i].pid -1].tabelaPaginas[memoria.frames[i].pagina].tempo_carga > max_time){
-            max_time = simulador.processos[memoria.frames[i].pid -1].tabelaPaginas[memoria.frames[i].pagina].tempo_carga;
+    for(int i=0; i<memoria->num_frames; i++){
+        if(simulador->tempo_atual - simulador->processos[memoria->frames[i].pid -1].tabelaPaginas[memoria->frames[i].pagina].tempo_carga > max_time){
+            max_time = simulador->tempo_atual - simulador->processos[memoria->frames[i].pid -1].tabelaPaginas[memoria->frames[i].pagina].tempo_carga;
             frame = i;
         }
     }
 
-    int auxPid = memoria.frames[frame].pid;
-    int aux_numPagina = memoria.frames[frame].pagina;
-    memoria.frames[frame].pid = pid;
-    memoria.frames[frame].pagina = pagina.num_pagina;
-    pagina.frame = frame;
-    pagina.presente = 1;
-    pagina.tempo_carga = simulador.tempo_atual;
-    pagina.ultimo_acesso = simulador.tempo_atual;
+    int auxPid = memoria->frames[frame].pid;
+    int aux_numPagina = memoria->frames[frame].pagina;
+    memoria->frames[frame].pid = pid;
+    memoria->frames[frame].pagina = pagina->num_pagina;
+    pagina->frame = frame;
+    pagina->presente = 1;
+    
+    int tempo =simulador->tempo_atual;
+    pagina->tempo_carga = tempo;
+    pagina->ultimo_acesso = tempo;
 
-    simulador.processos[auxPid-1].tabelaPaginas[aux_numPagina].frame = -1;
-    simulador.processos[auxPid-1].tabelaPaginas[aux_numPagina].presente = 0;
-    printf("Tempo t=%d: Substituido a pagina %d do processo %d no Frame %d, Pela Pagina %d do processo %d", simulador.tempo_atual,aux_numPagina, auxPid, frame, pagina.num_pagina, pid);
+    simulador->processos[auxPid-1].tabelaPaginas[aux_numPagina].frame = -1;
+    simulador->processos[auxPid-1].tabelaPaginas[aux_numPagina].presente = 0;
+    printf("\nTempo t=%d: Substituido a pagina %d do processo %d no Frame %d, Pela Pagina %d do processo %d\n", simulador->tempo_atual,aux_numPagina, auxPid, frame, pagina->num_pagina, pid);
     return frame;
 }
 
-int pageFaultClock(){
+/*int pageFaultClock(Pagina *pagina, memoriaFisica *memoria, int pid, Simulador *simulador){
     //necessario ter um "ponteiro" no simulador, ou algo que indique o index a ser trocado
     //trocar essa pagina pela acessada
     //atualizar os bits de monitoramento de ambas as paginas
@@ -237,33 +237,129 @@ int pageFaultClock(){
     //passar o ponteiro para a próxima posição
     printf("A fazer");
     return 0;
-}
+}*/
 
-int pageFaultLRU(Pagina pagina, memoriaFisica memoria, int pid, Simulador simulador){
+int pageFaultLRU(Pagina *pagina, memoriaFisica *memoria, int pid, Simulador *simulador){
     int max_time = 0;
     int frame = 0;
-    for(int i=0; i<memoria.num_frames; i++){
-        if(simulador.processos[memoria.frames[i].pid -1].tabelaPaginas[memoria.frames[i].pagina].ultimo_acesso > max_time){
-            max_time = simulador.processos[memoria.frames[i].pid -1].tabelaPaginas[memoria.frames[i].pagina].ultimo_acesso;
+    for(int i=0; i<memoria->num_frames; i++){
+        if(simulador->processos[memoria->frames[i].pid -1].tabelaPaginas[memoria->frames[i].pagina].ultimo_acesso > max_time){
+            max_time = simulador->processos[memoria->frames[i].pid -1].tabelaPaginas[memoria->frames[i].pagina].ultimo_acesso;
             frame = i;
         }
     }
 
 
-    int auxPid = memoria.frames[frame].pid;
-    int aux_numPagina = memoria.frames[frame].pagina;
-    memoria.frames[frame].pid = pid;
-    memoria.frames[frame].pagina = pagina.num_pagina;
-    pagina.frame = frame;
-    pagina.presente = 1;
-    pagina.tempo_carga = simulador.tempo_atual;
-    pagina.ultimo_acesso = simulador.tempo_atual;
+    int auxPid = memoria->frames[frame].pid;
+    int aux_numPagina = memoria->frames[frame].pagina;
+    memoria->frames[frame].pid = pid;
+    memoria->frames[frame].pagina = pagina->num_pagina;
+    pagina->frame = frame;
+    pagina->presente = 1;
+    
+    int tempo =simulador->tempo_atual;
+    pagina->tempo_carga = tempo;
+    pagina->ultimo_acesso = tempo;
 
-    simulador.processos[auxPid-1].tabelaPaginas[aux_numPagina].frame = -1;
-    simulador.processos[auxPid-1].tabelaPaginas[aux_numPagina].presente = 0;
-    printf("Tempo t=%d: Substituido a pagina %d do processo %d no Frame %d, Pela Pagina %d do processo %d", simulador.tempo_atual,aux_numPagina, auxPid, frame, pagina.num_pagina, pid);
+    simulador->processos[auxPid-1].tabelaPaginas[aux_numPagina].frame = -1;
+    simulador->processos[auxPid-1].tabelaPaginas[aux_numPagina].presente = 0;
+    printf("\nTempo t=%d: Substituido a pagina %d do processo %d no Frame %d, Pela Pagina %d do processo %d\n", simulador->tempo_atual,aux_numPagina, auxPid, frame, pagina->num_pagina, pid);
     return frame;
 }
 
-//Implementação da cache TLB
-//Função de algoritimo própio
+
+
+
+
+void inicializacaoPadrao(Simulador *s){
+    int tamanho_pagina = 4096;
+    int tamanho_memoria = 16384;
+    int algoritimo = 0;
+    int total_processos = 3;
+    int tamanho_processo = 16384;
+
+    memoriaFisica memoria;
+    memoria.tamanho = tamanho_memoria;
+    memoria.num_frames = tamanho_memoria/tamanho_pagina;
+    memoria.frames_ocupados = 0;
+    memoria.frames = (Frame*) malloc(memoria.num_frames*sizeof(Frame));
+    for(int i=0; i<memoria.num_frames; i++){
+        memoria.frames[i].pid = -1;
+        memoria.frames[i].pagina = -1;
+    }
+
+
+    s->memoria = memoria;
+    s->tam_pagina = tamanho_pagina;
+    s->totalAcessos = 0;
+    s->pageFaults = 0;
+    s->tempo_atual = 0;
+    s->algoritimo = algoritimo;
+    s->num_processos = total_processos;
+
+    s->processos = (Processo*) malloc(total_processos*sizeof(Processo));
+    for(int i=0; i<total_processos;i++){
+        s->processos[i].pid = i+1;
+        s->processos[i].tamanho = tamanho_processo;
+        s->processos[i].num_paginas = s->processos[i].tamanho/s->tam_pagina;
+        s->processos[i].tabelaPaginas = (Pagina*) malloc(s->processos[i].num_paginas*sizeof(Pagina));
+        for(int j=0; j<s->processos[i].num_paginas; j++){
+            s->processos[i].tabelaPaginas[j].num_pagina = j;
+            s->processos[i].tabelaPaginas[j].presente = 0;
+            s->processos[i].tabelaPaginas[j].frame  = -1;
+        }
+    }
+}
+
+void inicializacaoInput(Simulador *s){
+    int tamanho_pagina, tamanho_memoria, algoritimo, total_processos;
+    printf("Qual sera o tamanho da pagina? ");
+    scanf("%d", &tamanho_pagina);
+    printf("Qual sera o tamanho da memoria? ");
+    scanf("%d", &tamanho_memoria);
+    printf("Qual sera o algoritimo? 0-FIFO, 1-LRU, 2-CLOCK, 3-ALEATÓRIO, 4-PRÓPIO: ");
+    scanf("%d", &algoritimo);
+
+    memoriaFisica memoria;
+    memoria.tamanho = tamanho_memoria;
+    memoria.num_frames = tamanho_memoria/tamanho_pagina;
+    memoria.frames_ocupados = 0;
+    memoria.frames = (Frame*) malloc(memoria.num_frames*sizeof(Frame));
+    for(int i=0; i<memoria.num_frames; i++){
+        memoria.frames[i].pid = -1;
+        memoria.frames[i].pagina = -1;
+    }
+
+
+    s->memoria = memoria;
+    s->tam_pagina = tamanho_pagina;
+    s->totalAcessos = 0;
+    s->pageFaults = 0;
+    s->tempo_atual = 0;
+    s->algoritimo = algoritimo;
+
+    printf("Quantos processos teremos? ");
+    scanf("%d", &total_processos);
+    s->num_processos = total_processos;
+    s->processos = (Processo*) malloc(total_processos*sizeof(Processo));
+    for(int i=0; i<total_processos;i++){
+        s->processos[i].pid = i+1;
+        printf("Qual sera o tamanho do processo? ");
+        scanf("%d", &s->processos[i].tamanho);
+        s->processos[i].num_paginas = s->processos[i].tamanho/s->tam_pagina;
+        s->processos[i].tabelaPaginas = (Pagina*) malloc(s->processos[i].num_paginas*sizeof(Pagina));
+        for(int j=0; j<s->processos[i].num_paginas; j++){
+            s->processos[i].tabelaPaginas[j].num_pagina = j;
+            s->processos[i].tabelaPaginas[j].presente = 0;
+            s->processos[i].tabelaPaginas[j].frame  = -1;
+        }
+    }
+}
+
+void liberarMallocs(Simulador *simulador){
+    free(simulador->memoria.frames);
+    for(int i=0;i<simulador->num_processos; i++){
+        free(simulador->processos[i].tabelaPaginas);
+    }
+    free(simulador->processos);
+}
