@@ -39,7 +39,6 @@ typedef struct{
     int tempo_atual;
     int tam_pagina;
     int num_processos;
-    int ponterio_clock;
 }Simulador;
 
 
@@ -49,14 +48,19 @@ void imprimirMemoria(memoriaFisica memoria);
 
 int pageFaultFIFO(Pagina *pagina, memoriaFisica *memoria, int pid, Simulador *simulador);
 int pageFaultLRU(Pagina *pagina, memoriaFisica *memoria, int pid, Simulador *simulador);
-//int pageFaultClock(Pagina *pagina, memoriaFisica *memoria, int pid, Simulador *simulador);
 
 void inicializacaoInput(Simulador *s);
 void inicializacaoPadrao(Simulador *s);
 void liberarMallocs(Simulador *simulador);
 
+//Arrumar alguns prints esteticamente, abstração das inicializações e talvez de tradução
+
 //EXTRAS:
-//clock
+
+//clock -> para fazer o clock fazer uma função exclusiva, é preciso ter um ponterio que aponte para o proximo frame e bits de referencia nas paginas
+//se a página bit de referencia for 1, zera esse frame pular para o próximo até achar o primeiro bit referenciado 0 (controlar como e quando zerar e como manipular o ponteiro sõa os desafios)
+//ao fazer o clock é importante arrumar a inicialização por conta do ponteiro de bits de referencias e o switch dentro de tradução
+
 //aleatório
 //tlb
 //própio
@@ -172,12 +176,12 @@ void traducaoEnderecos(int endereco, Processo *processo, Simulador *simulador){
                     frame_alocado = pageFaultFIFO(&processo->tabelaPaginas[paginas], &simulador->memoria, processo->pid, simulador);
                     break;
                 
-                /*case 1:
-                    frame_alocado = pageFaultClock(&processo->tabelaPaginas[paginas], &simulador->memoria, processo->pid, simulador);*/
-                
-                default:
+                case 1:
                     frame_alocado = pageFaultLRU(&processo->tabelaPaginas[paginas], &simulador->memoria, processo->pid, simulador);
                     break;
+                
+                default:
+                    return;
             }
         }
         simulador->pageFaults += 1;
@@ -229,13 +233,28 @@ int pageFaultFIFO(Pagina *pagina, memoriaFisica *memoria, int pid, Simulador *si
 }
 
 /*int pageFaultClock(Pagina *pagina, memoriaFisica *memoria, int pid, Simulador *simulador){
-    //necessario ter um "ponteiro" no simulador, ou algo que indique o index a ser trocado
-    //trocar essa pagina pela acessada
-    //atualizar os bits de monitoramento de ambas as paginas
-    //atualizar os frames de ambas as paginas
-    //passar o ponteiro para a próxima posição
-    printf("A fazer");
-    return 0;
+    int frame = simulador->ponterio_clock;
+    simulador->ponterio_clock +=1;
+    if(simulador->ponterio_clock >= simulador->memoria.num_frames){
+        simulador->ponterio_clock = 0;
+    }
+
+    int auxPid = memoria->frames[frame].pid;
+    int aux_numPagina = memoria->frames[frame].pagina;
+    memoria->frames[frame].pid = pid;
+    memoria->frames[frame].pagina = pagina->num_pagina;
+    pagina->frame = frame;
+    pagina->presente = 1;
+
+    int tempo =simulador->tempo_atual;
+    pagina->tempo_carga = tempo;
+    pagina->ultimo_acesso = tempo;
+
+    simulador->processos[auxPid-1].tabelaPaginas[aux_numPagina].frame = -1;
+    simulador->processos[auxPid-1].tabelaPaginas[aux_numPagina].presente = 0;
+    
+    printf("\nTempo t=%d: Substituido a pagina %d do processo %d no Frame %d, Pela Pagina %d do processo %d\n", simulador->tempo_atual,aux_numPagina, auxPid, frame, pagina->num_pagina, pid);
+    return frame;
 }*/
 
 /*int pageFaulRandom(Pagina *pagina, memoriaFisica *memoria, int pid, Simulador *simulador){
@@ -249,8 +268,8 @@ int pageFaultLRU(Pagina *pagina, memoriaFisica *memoria, int pid, Simulador *sim
     int max_time = 0;
     int frame = 0;
     for(int i=0; i<memoria->num_frames; i++){
-        if(simulador->processos[memoria->frames[i].pid -1].tabelaPaginas[memoria->frames[i].pagina].ultimo_acesso > max_time){
-            max_time = simulador->processos[memoria->frames[i].pid -1].tabelaPaginas[memoria->frames[i].pagina].ultimo_acesso;
+        if(simulador->tempo_atual - simulador->processos[memoria->frames[i].pid -1].tabelaPaginas[memoria->frames[i].pagina].ultimo_acesso > max_time){
+            max_time = simulador->tempo_atual - simulador->processos[memoria->frames[i].pid -1].tabelaPaginas[memoria->frames[i].pagina].ultimo_acesso;
             frame = i;
         }
     }
