@@ -55,9 +55,7 @@ void inicializacaoInput(Simulador *s);
 void inicializacaoPadrao(Simulador *s);
 void liberarMallocs(Simulador *simulador);
 
-
-//Fórmula está errada no print do endereço físico
-
+//EXTRAS:
 //clock
 //aleatório
 //tlb
@@ -137,7 +135,7 @@ void traducaoEnderecos(int endereco, Processo *processo, Simulador *simulador){
         deslocamento = endereco%simulador->tam_pagina;
     }else{
         paginas = (endereco/simulador->tam_pagina);
-        deslocamento = endereco % processo->tamanho;
+        deslocamento = endereco % simulador->tam_pagina;
     }
 
     if(paginas > processo->num_paginas){
@@ -192,7 +190,8 @@ void traducaoEnderecos(int endereco, Processo *processo, Simulador *simulador){
         printf("Tempo t=%d: Pagina %d do processo %d esta na memoria fisica no frame %d!\n\n", simulador->tempo_atual, paginas, processo->pid, frame_alocado);
     }
     imprimirMemoria(simulador->memoria);
-    printf("Tempo t=%d: Endereco Virtual P%d: (%d) -> Pagina %d -> Frame %d -> Endereco fisico: (%d)\n\n[...continua...]\n\n", simulador->tempo_atual, processo->pid, endereco, paginas, frame_alocado, (frame_alocado*simulador->tam_pagina)+deslocamento);
+    int enderecoFisico = (frame_alocado*simulador->tam_pagina)+deslocamento;
+    printf("Tempo t=%d: Endereco Virtual P%d: (%d) -> Pagina %d -> Frame %d -> Endereco fisico: (%d)\n\n[...continua...]\n\n", simulador->tempo_atual, processo->pid, endereco, paginas, frame_alocado, enderecoFisico);
 }
 
 void estatisticas(Simulador simulador){
@@ -236,6 +235,13 @@ int pageFaultFIFO(Pagina *pagina, memoriaFisica *memoria, int pid, Simulador *si
     //atualizar os frames de ambas as paginas
     //passar o ponteiro para a próxima posição
     printf("A fazer");
+    return 0;
+}*/
+
+/*int pageFaulRandom(Pagina *pagina, memoriaFisica *memoria, int pid, Simulador *simulador){
+    //trocar essa pagina pela acessada
+    //atualizar os bits de monitoramento de ambas as paginas
+    //atualizar os frames de ambas as paginas
     return 0;
 }*/
 
