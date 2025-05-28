@@ -4,8 +4,6 @@
 typedef struct{
     int num_pagina;
     int presente;
-    //int modificado;
-    //int referenciado;  a ideia é boa de usar esse, mas o que complica é qunaod teria que verificar novamente para resetar
     int frame;
     int tempo_carga;
     int ultimo_acesso;
@@ -55,15 +53,6 @@ void liberarMallocs(Simulador *simulador);
 
 //Arrumar alguns prints esteticamente, abstração das inicializações e talvez de tradução
 
-//EXTRAS:
-
-//clock -> para fazer o clock fazer uma função exclusiva, é preciso ter um ponterio que aponte para o proximo frame e bits de referencia nas paginas
-//se a página bit de referencia for 1, zera esse frame pular para o próximo até achar o primeiro bit referenciado 0 (controlar como e quando zerar e como manipular o ponteiro sõa os desafios)
-//ao fazer o clock é importante arrumar a inicialização por conta do ponteiro de bits de referencias e o switch dentro de tradução
-
-//aleatório
-//tlb
-//própio
 
 int main(){
     Simulador s;
@@ -86,6 +75,7 @@ int main(){
     }
    
     
+    //Usar pergunta se quer padrão ou não para os processos
 
     int matriz_teste[15][2] = {
         {1, 0},       // página 0
@@ -144,7 +134,6 @@ void traducaoEnderecos(int endereco, Processo *processo, Simulador *simulador){
 
     if(paginas > processo->num_paginas){
         perror("Segmentation Fault");
-        //PERGUNTAR SE O PAGE FAULT DO SEGMENTATION FAULT DEVE SER CONTABILIZADO;
         return;
     }
 
@@ -232,38 +221,6 @@ int pageFaultFIFO(Pagina *pagina, memoriaFisica *memoria, int pid, Simulador *si
     return frame;
 }
 
-/*int pageFaultClock(Pagina *pagina, memoriaFisica *memoria, int pid, Simulador *simulador){
-    int frame = simulador->ponterio_clock;
-    simulador->ponterio_clock +=1;
-    if(simulador->ponterio_clock >= simulador->memoria.num_frames){
-        simulador->ponterio_clock = 0;
-    }
-
-    int auxPid = memoria->frames[frame].pid;
-    int aux_numPagina = memoria->frames[frame].pagina;
-    memoria->frames[frame].pid = pid;
-    memoria->frames[frame].pagina = pagina->num_pagina;
-    pagina->frame = frame;
-    pagina->presente = 1;
-
-    int tempo =simulador->tempo_atual;
-    pagina->tempo_carga = tempo;
-    pagina->ultimo_acesso = tempo;
-
-    simulador->processos[auxPid-1].tabelaPaginas[aux_numPagina].frame = -1;
-    simulador->processos[auxPid-1].tabelaPaginas[aux_numPagina].presente = 0;
-    
-    printf("\nTempo t=%d: Substituido a pagina %d do processo %d no Frame %d, Pela Pagina %d do processo %d\n", simulador->tempo_atual,aux_numPagina, auxPid, frame, pagina->num_pagina, pid);
-    return frame;
-}*/
-
-/*int pageFaulRandom(Pagina *pagina, memoriaFisica *memoria, int pid, Simulador *simulador){
-    //trocar essa pagina pela acessada
-    //atualizar os bits de monitoramento de ambas as paginas
-    //atualizar os frames de ambas as paginas
-    return 0;
-}*/
-
 int pageFaultLRU(Pagina *pagina, memoriaFisica *memoria, int pid, Simulador *simulador){
     int max_time = 0;
     int frame = 0;
@@ -291,10 +248,6 @@ int pageFaultLRU(Pagina *pagina, memoriaFisica *memoria, int pid, Simulador *sim
     printf("\nTempo t=%d: Substituido a pagina %d do processo %d no Frame %d, Pela Pagina %d do processo %d\n", simulador->tempo_atual,aux_numPagina, auxPid, frame, pagina->num_pagina, pid);
     return frame;
 }
-
-
-
-
 
 void inicializacaoPadrao(Simulador *s){
     int tamanho_pagina = 4096;
